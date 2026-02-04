@@ -1,5 +1,112 @@
 /* BUNDLED GAME SCRIPT FOR LOCAL EXECUTION */
 
+/* --- SoundController.js --- */
+class SoundController {
+    constructor() {
+        this.ctx = null;
+        this.initialized = false;
+    }
+
+    init() {
+        if (this.initialized) return;
+        const AudioContext = window.AudioContext || window.webkitAudioContext;
+        this.ctx = new AudioContext();
+        this.initialized = true;
+    }
+
+    playTone(freq, type, duration) {
+        if (!this.initialized) return;
+        const osc = this.ctx.createOscillator();
+        const gain = this.ctx.createGain();
+
+        osc.type = type;
+        osc.frequency.setValueAtTime(freq, this.ctx.currentTime);
+
+        osc.connect(gain);
+        gain.connect(this.ctx.destination);
+
+        osc.start();
+        gain.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + duration);
+        osc.stop(this.ctx.currentTime + duration);
+    }
+
+    shoot() {
+        if (!this.initialized) return;
+        const osc = this.ctx.createOscillator();
+        const gain = this.ctx.createGain();
+
+        osc.type = 'sawtooth';
+        osc.frequency.setValueAtTime(800, this.ctx.currentTime);
+        osc.frequency.exponentialRampToValueAtTime(100, this.ctx.currentTime + 0.15);
+
+        gain.gain.setValueAtTime(0.1, this.ctx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + 0.15);
+
+        osc.connect(gain);
+        gain.connect(this.ctx.destination);
+        osc.start();
+        osc.stop(this.ctx.currentTime + 0.15);
+    }
+
+    explosion() {
+        if (!this.initialized) return;
+        const bufferSize = this.ctx.sampleRate * 0.5; // 0.5 sec
+        const buffer = this.ctx.createBuffer(1, bufferSize, this.ctx.sampleRate);
+        const data = buffer.getChannelData(0);
+
+        for (let i = 0; i < bufferSize; i++) {
+            data[i] = Math.random() * 2 - 1;
+        }
+
+        const noise = this.ctx.createBufferSource();
+        noise.buffer = buffer;
+
+        const gain = this.ctx.createGain();
+        gain.gain.setValueAtTime(0.2, this.ctx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + 0.5);
+
+        noise.connect(gain);
+        gain.connect(this.ctx.destination);
+        noise.start();
+    }
+
+    powerUp() {
+        if (!this.initialized) return;
+        const osc = this.ctx.createOscillator();
+        const gain = this.ctx.createGain();
+
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(600, this.ctx.currentTime);
+        osc.frequency.linearRampToValueAtTime(1200, this.ctx.currentTime + 0.3);
+
+        gain.gain.setValueAtTime(0.2, this.ctx.currentTime);
+        gain.gain.linearRampToValueAtTime(0, this.ctx.currentTime + 0.3);
+
+        osc.connect(gain);
+        gain.connect(this.ctx.destination);
+        osc.start();
+        osc.stop(this.ctx.currentTime + 0.3);
+    }
+
+    gameOver() {
+        if (!this.initialized) return;
+        const osc = this.ctx.createOscillator();
+        const gain = this.ctx.createGain();
+
+        osc.type = 'triangle';
+        osc.frequency.setValueAtTime(300, this.ctx.currentTime);
+        osc.frequency.exponentialRampToValueAtTime(50, this.ctx.currentTime + 1.5);
+
+        gain.gain.setValueAtTime(0.3, this.ctx.currentTime);
+        gain.gain.linearRampToValueAtTime(0, this.ctx.currentTime + 1.5);
+
+        osc.connect(gain);
+        gain.connect(this.ctx.destination);
+        osc.start();
+        osc.stop(this.ctx.currentTime + 1.5);
+    }
+}
+
 /* --- InputHandler.js --- */
 class InputHandler {
     constructor() {
@@ -305,6 +412,7 @@ class Player {
     }
 
     activatePowerUp(type) {
+        this.game.sounds.powerUp(); // Sound Trigger
         if (type === 'HEALTH') {
             this.hp = Math.min(this.hp + 30, this.maxHp);
             this.updateHealthVisuals();
@@ -344,6 +452,8 @@ class Player {
     }
 
     shoot() {
+        this.game.sounds.shoot(); // Sound Trigger
+
         // Main Logic
         if (this.weaponType === 'SPREAD') {
             this.game.projectiles.push(new Projectile(this.game, this.x + this.width / 2, this.y, 0));
@@ -384,10 +494,8 @@ class Player {
 
         // Wingman Graphics
         if (this.hasWingman) {
-            // Left Wingman
             ctx.fillStyle = '#00f3ff';
             ctx.beginPath(); ctx.arc(-40, 0, 5, 0, Math.PI * 2); ctx.fill();
-            // Right Wingman
             ctx.beginPath(); ctx.arc(40, 0, 5, 0, Math.PI * 2); ctx.fill();
         }
 
@@ -410,6 +518,7 @@ class Game {
 
         this.player = new Player(this);
         this.input = new InputHandler();
+        this.sounds = new SoundController();
 
         this.projectiles = [];
         this.enemies = [];
@@ -461,13 +570,15 @@ class Game {
     }
 
     startGame() {
+        this.sounds.init(); // Initialize Audio Context on user input
+
         this.isPlaying = true;
         this.gameOver = false;
         this.score = 0;
         this.scoreEl.innerText = '0';
         this.startScreen.classList.remove('active');
         this.startScreen.classList.add('hidden');
-        this.gameOverScreen.classList.remove('active'); // Ensure active is removed
+        this.gameOverScreen.classList.remove('active');
         this.gameOverScreen.classList.add('hidden');
         this.lastTime = 0;
 
@@ -557,6 +668,7 @@ class Game {
                 this.player.updateHealthVisuals();
                 if (this.player.hp <= 0) {
                     this.gameOver = true;
+                    this.sounds.gameOver(); // Sound Trigger
                 }
             }
 
@@ -572,6 +684,7 @@ class Game {
                         this.createExplosion(enemy.x, enemy.y, enemy.color, 10);
                         this.score += enemy.score;
                         this.scoreEl.innerText = this.score;
+                        this.sounds.explosion(); // Sound Trigger for Kill
 
                         // DROP POWERUP? 50% Chance (High Drop Rate)
                         if (Math.random() < 0.5) {
